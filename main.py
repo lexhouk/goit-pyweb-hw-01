@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from collections import UserDict
+from collections import UserDict, defaultdict
 from datetime import datetime, timedelta
+from functools import wraps
 from typing import Callable, Dict
 from pickle import dump, load
 
@@ -159,12 +160,14 @@ class AddressBook(UserDict):
 
 
 def input_error(func: Callable) -> Callable:
+    @wraps(func)
     def inner(*args: list, **kwargs: dict):
         try:
             return func(*args, **kwargs)
         except Exception:
             return 'Something went wrong.'
 
+    @wraps(func)
     def add_contact_error(args: list[str], book: AddressBook) -> str:
         try:
             return func(args, book)
@@ -173,6 +176,7 @@ def input_error(func: Callable) -> Callable:
         except ValueError:
             return 'Give me a new name and a new phone, please.'
 
+    @wraps(func)
     def change_contact_error(args: list[str], book: AddressBook) -> str:
         try:
             return func(args, book)
@@ -181,6 +185,7 @@ def input_error(func: Callable) -> Callable:
         except ValueError:
             return 'Give me an existing name and a new phone, please.'
 
+    @wraps(func)
     def show_phone_error(args: list[str], book: AddressBook) -> str:
         try:
             return func(args, book)
@@ -189,12 +194,14 @@ def input_error(func: Callable) -> Callable:
         except IndexError:
             return RecordError.MESSAGE
 
+    @wraps(func)
     def show_all_error(book: AddressBook) -> str:
         try:
             return func(book)
         except ValueError:
             return 'Contacts list is empty.'
 
+    @wraps(func)
     def add_birthday_error(args: list[str], book: AddressBook) -> str:
         try:
             return func(args, book)
@@ -203,12 +210,14 @@ def input_error(func: Callable) -> Callable:
         except ValueError:
             return 'Give me an existing name and birthday date, please.'
 
+    @wraps(func)
     def show_birthday_error(args: list[str], book: AddressBook) -> str:
         try:
             return func(args, book)
         except (IndexError, RecordError):
             return RecordError.MESSAGE
 
+    @wraps(func)
     def birthdays_error(book: AddressBook) -> str:
         try:
             return func(book)
@@ -226,6 +235,13 @@ def input_error(func: Callable) -> Callable:
     }
 
     return HANDLERS.get(func.__name__, inner)
+
+
+def prompt() -> str:
+    '''
+    Greeting.
+    '''
+    return 'How can I help you?'
 
 
 @input_error
@@ -258,15 +274,22 @@ def show_phone(args: list[str], book: AddressBook) -> str:
     return str(book.find(args[0]))
 
 
-def table(left_cell: str, right_cell: str, data: Dict[str, str]) -> str:
+def table(left_cell: str,
+          right_cell: str,
+          data: Dict[str, str],
+          same: bool = False) -> str:
+
     def divider(left: str, right: str, middle: str, cell: str = '═'):
         return left + cell * (longest_left + 2) + middle + cell * \
             (longest_right + 2) + right
 
     def row() -> str:
-        return '║ {} │ {} ║'.format(
-            left_cell.ljust(longest_left),
-            right_cell.rjust(longest_right))
+        if same:
+            right = right_cell.ljust(longest_right)
+        else:
+            right = right_cell.rjust(longest_right)
+
+        return f'║ {left_cell.ljust(longest_left)} │ {right} ║'
 
     longest_left = max([len(left_cell) for left_cell in data.keys()])
     longest_right = max([len(right_cell) for right_cell in data.values()])
@@ -289,6 +312,9 @@ def table(left_cell: str, right_cell: str, data: Dict[str, str]) -> str:
 
 @input_error
 def show_all(book: AddressBook) -> str:
+    '''
+    Show contacts.
+    '''
     return table(
         'Full name',
         'Phone number',
@@ -309,6 +335,9 @@ def show_birthday(args: list[str], book: AddressBook) -> str:
 
 @input_error
 def birthdays(book: AddressBook) -> str:
+    '''
+    Show birthdays.
+    '''
     events = book.get_upcoming_birthdays()
 
     return table('Date',
@@ -347,6 +376,12 @@ def load_data(filename: str = 'address-book.pkl') -> AddressBook:
 def save_data(book: AddressBook, filename: str = 'address-book.pkl') -> None:
     with open(filename, 'wb') as file:
         dump(book, file)
+
+
+@input_error
+def quit(book: AddressBook) -> str:
+    save_data(book)
+    return 'Good bye!'
 
 
 class Reader(ABC):
@@ -390,6 +425,35 @@ class CliWriter(Writer):
         print(data)
 
 
+def description(commands: list[Dict[str, Callable]]) -> str:
+    '''
+    Show commands.
+    '''
+
+    items = {}
+
+    for callbacks in commands:
+        for command, callback in callbacks.items():
+            function = callback.__name__
+
+            if callback.__doc__ is None:
+                hint = function.capitalize().replace('_', ' ')
+            else:
+                hint = callback.__doc__.strip()[:-1]
+
+            if function in items:
+                items[function]['commands'].append(command)
+            else:
+                items[function] = {'hint': hint, 'commands': [command]}
+
+    return table(
+        'Name',
+        'Description',
+        {', '.join(item['commands']): item['hint'] for item in items.values()},
+        True
+    )
+
+
 def main() -> None:
     reader = CliReader('Enter a command: ')
     writer = CliWriter()
@@ -398,23 +462,63 @@ def main() -> None:
 
     book = load_data()
 
+    COMMANDS: list[Dict[str, Callable]] = [
+        {
+            'hello': prompt
+        },
+        {
+            'help': description,
+            'commands': description,
+            '?': description,
+            'all': show_all,
+            'birthdays': birthdays,
+            'close': quit,
+            'exit': quit
+        },
+        {
+            'add': add_contact,
+            'change': change_contact,
+            'phone': show_phone,
+            'add-birthday': add_birthday,
+            'show-birthday': show_birthday
+        }
+    ]
+
+    controls = defaultdict(list)
+
+    for callbacks in COMMANDS:
+        for command, callback in callbacks.items():
+            if callback.__name__ in ('description', 'quit'):
+                controls[callback.__name__ == 'description'].append(command)
+
     while True:
         command, *args = reader.read()
 
-        match command:
-            case 'hello': writer.write('How can I help you?')
-            case 'add': writer.write(add_contact(args, book))
-            case 'change': writer.write(change_contact(args, book))
-            case 'phone': writer.write(show_phone(args, book))
-            case 'all': writer.write(show_all(book))
-            case 'add-birthday': writer.write(add_birthday(args, book))
-            case 'show-birthday': writer.write(show_birthday(args, book))
-            case 'birthdays': writer.write(birthdays(book))
-            case _ if command in ['close', 'exit']:
-                save_data(book)
-                writer.write('Good bye!')
+        response = 'Invalid command.'
+
+        for count, callbacks in enumerate(COMMANDS):
+            if command in callbacks:
+                parameters = []
+
+                if count:
+                    if command in controls[True]:
+                        parameters.append(COMMANDS)
+                    else:
+                        parameters.append(book)
+
+                        if count > 1:
+                            parameters.append(args)
+
+                        parameters.reverse()
+
+                response = callbacks[command](*parameters)
+
                 break
-            case _: writer.write('Invalid command.')
+
+        writer.write(response)
+
+        if command in controls[False]:
+            break
 
 
 if __name__ == '__main__':
