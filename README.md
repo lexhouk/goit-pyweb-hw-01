@@ -28,7 +28,7 @@ classDiagram
         +__str__() str
     }
 
-    Phone: +__init__(str value)
+    Phone: +__init__(str value) None
 
     class Birthday {
         +str FORMAT
@@ -62,7 +62,7 @@ classDiagram
         date_to_string(datetime.datetime date) str$
         find_next_weekday(datetime.datetime start_date, int weekday) datetime.datetime$
         +adjust_for_weekend(datetime.datetime birthday) datetime.datetime
-        +get_upcoming_birthdays(int days) Dict[str, [list[str]]]
+        +get_upcoming_birthdays(int days) Dict[str, list[str]]
     }
 
     class Exception {
@@ -92,7 +92,7 @@ classDiagram
 
     class Writer {
         <<interface>>
-        write(str data)*
+        write(str data) None*
     }
 
     class CliWriter {
