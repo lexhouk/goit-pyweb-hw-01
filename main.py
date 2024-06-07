@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections import UserDict
 from datetime import datetime, timedelta
 from typing import Callable, Dict
@@ -229,12 +230,6 @@ def input_error(func: Callable) -> Callable:
 
 
 @input_error
-def parse_input(user_input: str) -> tuple[str]:
-    cmd, *args = user_input.split()
-    return cmd.strip().lower(), *args
-
-
-@input_error
 def add_contact(args: list[str], book: AddressBook) -> str:
     name, phone, *_ = args
 
@@ -355,6 +350,26 @@ def save_data(book: AddressBook, filename: str = 'address-book.pkl') -> None:
         dump(book, file)
 
 
+class Reader(ABC):
+    def __init__(self, prompt: str) -> None:
+        super().__init__()
+        self._prompt = prompt
+
+    @abstractmethod
+    def read(self) -> tuple[str]:
+        ...
+
+
+class CliReader(Reader):
+    def read(self) -> tuple[str]:
+        return self.__parse(input(self._prompt))
+
+    @input_error
+    def __parse(self, user_input: str) -> tuple[str]:
+        cmd, *args = user_input.split()
+        return cmd.strip().lower(), *args
+
+
 def main() -> None:
     if len(argv) > 1:
         global debug
@@ -368,8 +383,10 @@ def main() -> None:
 
     print('Welcome to the assistant bot!')
 
+    reader = CliReader('Enter a command: ')
+
     while True:
-        command, *args = parse_input(input('Enter a command: '))
+        command, *args = reader.read()
 
         match command:
             case 'hello': print('How can I help you?')
