@@ -7,7 +7,7 @@ from pickle import dump, load
 debug: bool = False
 
 
-class Field:
+class Field(ABC):
     def __init__(self, value: str):
         self.value = value
 
