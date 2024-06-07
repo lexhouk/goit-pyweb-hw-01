@@ -3,7 +3,6 @@ from collections import UserDict
 from datetime import datetime, timedelta
 from typing import Callable, Dict
 from pickle import dump, load
-from sys import argv
 
 debug: bool = False
 
@@ -361,47 +360,61 @@ class Reader(ABC):
 
 
 class CliReader(Reader):
-    def read(self) -> tuple[str]:
-        return self.__parse(input(self._prompt))
-
     @input_error
-    def __parse(self, user_input: str) -> tuple[str]:
-        cmd, *args = user_input.split()
+    def read(self) -> tuple[str]:
+        cmd, *args = input(self._prompt).split()
         return cmd.strip().lower(), *args
 
 
-def main() -> None:
-    if len(argv) > 1:
-        global debug
+class Writer(ABC):
+    @abstractmethod
+    def write(self, data: str) -> None:
+        ...
 
-        for argument in argv[1:]:
-            if argument.lower().find('debug') != -1:
-                debug = True
-                break
+
+class CliWriter(Writer):
+    def __init__(self) -> None:
+        super().__init__()
+
+        from sys import argv
+
+        if len(argv) > 1:
+            global debug
+
+            for argument in argv[1:]:
+                if argument.lower().find('debug') != -1:
+                    debug = True
+                    break
+
+    def write(self, data: str) -> None:
+        print(data)
+
+
+def main() -> None:
+    reader = CliReader('Enter a command: ')
+    writer = CliWriter()
+
+    writer.write('Welcome to the assistant bot!')
 
     book = load_data()
-
-    print('Welcome to the assistant bot!')
-
-    reader = CliReader('Enter a command: ')
 
     while True:
         command, *args = reader.read()
 
         match command:
-            case 'hello': print('How can I help you?')
-            case 'add': print(add_contact(args, book))
-            case 'change': print(change_contact(args, book))
-            case 'phone': print(show_phone(args, book))
-            case 'all': print(show_all(book))
-            case 'add-birthday': print(add_birthday(args, book))
-            case 'show-birthday': print(show_birthday(args, book))
-            case 'birthdays': print(birthdays(book))
+            case 'hello': writer.write('How can I help you?')
+            case 'add': writer.write(add_contact(args, book))
+            case 'change': writer.write(change_contact(args, book))
+            case 'phone': writer.write(show_phone(args, book))
+            case 'all': writer.write(show_all(book))
+            case 'add-birthday': writer.write(add_birthday(args, book))
+            case 'show-birthday': writer.write(show_birthday(args, book))
+            case 'birthdays': writer.write(birthdays(book))
             case _ if command in ['close', 'exit']:
                 save_data(book)
-                print('Good bye!')
+                writer.write('Good bye!')
                 break
-            case _: print('Invalid command.')
+            case _: writer.write('Invalid command.')
 
 
 if __name__ == '__main__':
